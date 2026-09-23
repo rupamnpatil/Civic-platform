@@ -1,0 +1,49 @@
+# Dependencies
+node_modules/
+*/node_modules/
+
+# Environment variables - NEVER COMMIT THESE
+.env
+.env.local
+.env.*.local
+*/env
+
+# Expo
+.expo/
+.expo-shared/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+
+# React Native / Metro
+.metro-health-check*
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# Build outputs
+dist/
+build/
+web-build/
+*/dist/
+*/build/
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Misc
+coverage/
+.cache/
