@@ -1,16 +1,13 @@
-# Dependencies
+# 1. Dependencies (The heaviest "trash" files)
 node_modules/
-*/node_modules/
 
-# Environment variables - NEVER COMMIT THESE
+# 2. Local Environment Variables (Security risk if uploaded)
 .env
 .env.local
 .env.*.local
-*/env
 
-# Expo
+# 3. Expo & React Native Build/Cache files
 .expo/
-.expo-shared/
 *.jks
 *.p8
 *.p12
@@ -18,32 +15,17 @@ node_modules/
 *.mobileprovision
 *.orig.*
 
-# React Native / Metro
-.metro-health-check*
-npm-debug.*
-yarn-debug.*
-yarn-error.*
-
-# Build outputs
-dist/
-build/
-web-build/
-*/dist/
-*/build/
-
-# Logs
-*.log
-logs/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# Editor / OS
+# 4. AI & IDE Settings
+.claude/
 .vscode/
 .idea/
+
+# 5. Documentation & Project Trees (As requested)
+docs/
+*.pdf
+REALITY_CHECK_COMPLETE_DOCUMENTATION.md
+project-tree.txt
+
+# 6. General OS System Files
 .DS_Store
 Thumbs.db
-
-# Misc
-coverage/
-.cache/
