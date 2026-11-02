@@ -37,32 +37,52 @@ function coloredIcon(status) {
   });
 }
 
-// Helper to auto-fit bounds to markers
-function FitBounds({ reports }) {
+// Helper to auto-fit bounds to markers or fly to selected report
+function FitBounds({ reports, selected }) {
   const map = useMap();
+
   useEffect(() => {
-    if (reports.length === 0) return;
+    if (selected && selected.location?.coordinates?.length === 2) {
+      map.flyTo([selected.location.coordinates[1], selected.location.coordinates[0]], 15, {
+        duration: 1.2,
+      });
+      return;
+    }
+
+    const validReports = (reports || []).filter(
+      (r) => r.location?.coordinates && r.location.coordinates.length === 2
+    );
+    if (validReports.length === 0) return;
+
     const bounds = L.latLngBounds(
-      reports.map((r) => [r.location.coordinates[1], r.location.coordinates[0]])
+      validReports.map((r) => [r.location.coordinates[1], r.location.coordinates[0]])
     );
     map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
-  }, [reports.length]);
+  }, [reports, selected, map]);
+
   return null;
 }
 
-export default function ReportMap({ reports, onSelect }) {
+// Center defaults to Mumbai / Palghar region (Mumbai University Mini Project)
+const DEFAULT_CENTER = [19.076, 72.877];
+
+export default function ReportMap({ reports, selected, onSelect }) {
+  const validReports = (reports || []).filter(
+    (r) => r.location?.coordinates && r.location.coordinates.length === 2
+  );
+
   return (
     <MapContainer
-      center={[12.95, 77.55]}
-      zoom={12}
+      center={DEFAULT_CENTER}
+      zoom={11}
       style={{ width: '100%', height: '100%' }}
     >
       <TileLayer
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         attribution="&copy; OpenStreetMap contributors"
       />
-      <FitBounds reports={reports} />
-      {reports.map((r) => (
+      <FitBounds reports={validReports} selected={selected} />
+      {validReports.map((r) => (
         <Marker
           key={r._id}
           position={[r.location.coordinates[1], r.location.coordinates[0]]}

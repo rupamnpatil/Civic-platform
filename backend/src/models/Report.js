@@ -46,6 +46,7 @@ const reportSchema = new mongoose.Schema(
       {
         status: String,
         changedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        actor: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
         note: String,
         timestamp: { type: Date, default: Date.now },
       },

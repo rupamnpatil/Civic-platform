@@ -4,6 +4,7 @@ import {
   KeyboardAvoidingView, Platform, ActivityIndicator, StatusBar,
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
+import { API_URL } from '../api/client';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '../utils/theme';
 
 export default function AuthScreen() {
@@ -21,12 +22,24 @@ export default function AuthScreen() {
     if (!isLogin && !name.trim()) {
       return Alert.alert('Missing details', 'Please enter your name.');
     }
+    if (!isLogin && password.length < 6) {
+      return Alert.alert('Weak Password', 'Password must be at least 6 characters long.');
+    }
     setLoading(true);
     try {
-      if (isLogin) await login(email.trim().toLowerCase(), password);
-      else await register(name.trim(), email.trim().toLowerCase(), password);
+      if (isLogin) {
+        await login(email.trim().toLowerCase(), password);
+      } else {
+        await register(name.trim(), email.trim().toLowerCase(), password);
+      }
     } catch (err) {
-      Alert.alert('Error', err.response?.data?.message || 'Something went wrong.');
+      const msg =
+        err.response?.data?.message ||
+        (err.message === 'Network Error'
+          ? `Cannot connect to server at ${API_URL}. Ensure your phone and PC are on the same Wi-Fi and the backend is running.`
+          : err.message) ||
+        'Something went wrong.';
+      Alert.alert(isLogin ? 'Sign In Failed' : 'Registration Failed', msg);
     } finally {
       setLoading(false);
     }

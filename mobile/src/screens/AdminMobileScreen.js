@@ -6,6 +6,7 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import client from '../api/client';
+import useSocket from '../hooks/useSocket';
 import { CATEGORY_EMOJI } from '../utils/categories';
 import {
   COLORS, SPACING, RADIUS, SHADOWS,
@@ -30,6 +31,15 @@ export default function AdminMobileScreen() {
   };
 
   useFocusEffect(useCallback(() => { fetchReports(); }, []));
+
+  useSocket({
+    onReportNew: (r) =>
+      setReports((prev) => (prev.some((x) => x._id === r._id) ? prev : [r, ...prev])),
+    onReportUpdated: (u) =>
+      setReports((prev) => prev.map((r) => (r._id === u._id ? u : r))),
+    onReportDeleted: ({ id }) =>
+      setReports((prev) => prev.filter((r) => r._id !== id)),
+  });
 
   const updateStatus = (report, newStatus) => {
     Alert.alert(
@@ -119,8 +129,8 @@ export default function AdminMobileScreen() {
           contentContainerStyle={{ paddingHorizontal: SPACING.lg, gap: 8 }}
           renderItem={({ item }) => (
             <TouchableOpacity
-              style={[styles.chip, filter === item.id && styles.chipActive]}
               onPress={() => setFilter(item.id)}
+              style={[styles.chip, filter === item.id && styles.chipActive]}
             >
               <Text style={[styles.chipText, filter === item.id && styles.chipTextActive]}>
                 {item.label}
@@ -143,8 +153,8 @@ export default function AdminMobileScreen() {
         }
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Text style={styles.emptyTitle}>No reports match</Text>
-            <Text style={styles.emptyText}>Adjust filters to see more.</Text>
+            <Text style={styles.emptyTitle}>No reports found</Text>
+            <Text style={styles.emptyText}>Nothing in this queue.</Text>
           </View>
         }
         renderItem={({ item }) => (
@@ -155,7 +165,7 @@ export default function AdminMobileScreen() {
             <View style={styles.cardBody}>
               <View style={styles.cardTop}>
                 <Text style={styles.cat}>
-                  {CATEGORY_EMOJI[item.category]} {item.category.replace('_', ' ')}
+                  {CATEGORY_EMOJI[item.category] || '•'} {item.category.replace('_', ' ')}
                 </Text>
                 <View style={[styles.statusPill, { backgroundColor: STATUS_BG[item.status] }]}>
                   <Text style={[styles.statusText, { color: STATUS_COLORS[item.status] }]}>
@@ -164,16 +174,15 @@ export default function AdminMobileScreen() {
                 </View>
               </View>
 
-              <Text style={styles.desc} numberOfLines={2}>{item.description}</Text>
-              {item.address ? (
-                <Text style={styles.meta} numberOfLines={1}>{item.address}</Text>
-              ) : null}
+              <Text style={styles.desc}>{item.description}</Text>
               <Text style={styles.meta}>
-                {new Date(item.createdAt).toLocaleString()} · ▲ {item.upvotes?.length || 0}
+                {item.address || `${item.location.coordinates[1].toFixed(4)}°, ${item.location.coordinates[0].toFixed(4)}°`}
+                {' · '}{new Date(item.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                {item.upvotes?.length > 0 && ` · ▲ ${item.upvotes.length}`}
               </Text>
 
               <View style={styles.actions}>
-                {STATUSES.filter((s) => s !== item.status).slice(0, 3).map((s) => (
+                {STATUSES.filter((s) => s !== item.status).map((s) => (
                   <TouchableOpacity
                     key={s}
                     style={[styles.actionBtn, { borderColor: STATUS_COLORS[s] }]}
@@ -185,7 +194,7 @@ export default function AdminMobileScreen() {
                   </TouchableOpacity>
                 ))}
                 <TouchableOpacity
-                  style={[styles.actionBtn, { borderColor: COLORS.danger }]}
+                  style={[styles.actionBtn, { borderColor: COLORS.danger, marginLeft: 'auto' }]}
                   onPress={() => deleteReport(item)}
                 >
                   <Text style={[styles.actionText, { color: COLORS.danger }]}>Delete</Text>
@@ -202,7 +211,7 @@ export default function AdminMobileScreen() {
 function StatBox({ value, label }) {
   return (
     <View style={styles.statBox}>
-      <Text style={styles.statValue}>{value}</Text>
+      <Text style={styles.statVal}>{value}</Text>
       <Text style={styles.statLabel}>{label}</Text>
     </View>
   );
@@ -216,27 +225,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.xl, paddingTop: 60, paddingBottom: SPACING.lg,
     backgroundColor: COLORS.surface, borderBottomWidth: 1, borderBottomColor: COLORS.border,
   },
-  topRow: { flexDirection: 'row', alignItems: 'center' },
+  topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   kicker: {
     fontSize: 10, fontWeight: '800', color: COLORS.accent,
     letterSpacing: 1.2, textTransform: 'uppercase',
   },
   title: { fontSize: 22, fontWeight: '800', color: COLORS.text, letterSpacing: -0.4, marginTop: 2 },
   logoutBtn: {
-    paddingHorizontal: 12, paddingVertical: 8,
-    borderRadius: RADIUS.sm, borderWidth: 1, borderColor: COLORS.border,
+    paddingVertical: 6, paddingHorizontal: 12,
+    borderRadius: RADIUS.md, backgroundColor: COLORS.surfaceAlt,
   },
-  logoutText: { fontSize: 11, fontWeight: '800', color: COLORS.textSecondary, letterSpacing: 0.4 },
+  logoutText: { fontSize: 11, fontWeight: '800', color: COLORS.danger, textTransform: 'uppercase', letterSpacing: 0.5 },
 
-  statsRow: {
-    flexDirection: 'row', gap: 8, marginTop: SPACING.lg,
-    paddingTop: SPACING.lg, borderTopWidth: 1, borderTopColor: COLORS.border,
+  statsRow: { flexDirection: 'row', gap: 8, marginTop: SPACING.lg },
+  statBox: {
+    flex: 1, backgroundColor: COLORS.surfaceAlt, padding: 10,
+    borderRadius: RADIUS.md, alignItems: 'center',
   },
-  statBox: { flex: 1 },
-  statValue: { fontSize: 22, fontWeight: '900', color: COLORS.text, letterSpacing: -0.5 },
+  statVal: { fontSize: 18, fontWeight: '800', color: COLORS.text },
   statLabel: {
-    fontSize: 10, fontWeight: '800', color: COLORS.textMuted,
-    textTransform: 'uppercase', letterSpacing: 0.6, marginTop: 2,
+    fontSize: 9, fontWeight: '800', color: COLORS.textMuted,
+    textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 2,
   },
 
   filters: { paddingVertical: SPACING.md },

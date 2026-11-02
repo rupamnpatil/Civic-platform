@@ -29,33 +29,58 @@ exports.createReport = async (req, res) => {
   const lngNum = parseFloat(lng);
   const latNum = parseFloat(lat);
 
+  // 1. Proximity-based duplicate check within 15 meters
   const duplicate = await findDuplicateReport(Report, lngNum, latNum, category, 15);
 
-  const uploaded = await uploadToCloudinary(req.file.buffer);
-
   if (duplicate) {
-    if (!duplicate.upvotes.some((u) => String(u) === String(req.user._id))) {
+    // Merge into existing report as an upvote (avoids redundant image upload to Cloudinary)
+    const hasUpvoted = duplicate.upvotes.some((u) => String(u) === String(req.user._id));
+    if (!hasUpvoted) {
       duplicate.upvotes.push(req.user._id);
       await duplicate.save();
-      // Award points to the original reporter
+      // Award 5 points to the original reporter
       await awardPoints(duplicate.reporterId, 5);
       await refreshUserBadges(duplicate.reporterId);
     }
+
+    const populatedDup = await Report.findById(duplicate._id)
+      .populate('reporterId', 'name email badges points')
+      .populate('authorityId', 'name department');
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to('admins').emit('report:updated', populatedDup || duplicate);
+      io.emit('report:updated', populatedDup || duplicate);
+      io.to(`user:${duplicate.reporterId}`).emit('report:updated', populatedDup || duplicate);
+    }
+
     return res.status(200).json({
       success: true,
       merged: true,
       message: 'Similar report found — your upvote was added.',
-      report: duplicate,
+      report: populatedDup || duplicate,
     });
   }
 
+  // 2. Only upload image to Cloudinary if it's confirmed to be a new report
+  let photoUrl = '';
+  try {
+    const uploaded = await uploadToCloudinary(req.file.buffer);
+    photoUrl = uploaded.secure_url;
+  } catch (cloudErr) {
+    console.warn('⚠️ Cloudinary upload failed, using data URI fallback:', cloudErr.message);
+    const mime = req.file.mimetype || 'image/jpeg';
+    photoUrl = 'data:' + mime + ';base64,' + req.file.buffer.toString('base64');
+  }
+
+  // 3. Auto-route to municipal authority zone using GeoJSON point-in-polygon
   const authority = await findAuthorityForLocation(lngNum, latNum);
 
   const report = await Report.create({
     reporterId: req.user._id,
     category,
     description,
-    photoUrl: uploaded.secure_url,
+    photoUrl,
     location: { type: 'Point', coordinates: [lngNum, latNum] },
     address: address || '',
     authorityId: authority?._id || null,
@@ -65,21 +90,30 @@ exports.createReport = async (req, res) => {
       {
         status: authority ? 'assigned' : 'submitted',
         changedBy: req.user._id,
+        actor: req.user._id,
         note: authority
-          ? `Auto-routed to ${authority.name}`
+          ? `Auto-routed to ${authority.name} (${authority.department})`
           : 'Awaiting manual routing',
       },
     ],
   });
 
-  // Award points + refresh badges
+  // Award 10 points to reporter + refresh badges
   await awardPoints(req.user._id, 10);
   await refreshUserBadges(req.user._id);
 
-  const io = req.app.get('io');
-  io.to('admins').emit('report:new', report);
+  // Fetch fully populated report for real-time delivery
+  const populatedReport = await Report.findById(report._id)
+    .populate('reporterId', 'name email badges points')
+    .populate('authorityId', 'name department');
 
-  res.status(201).json({ success: true, report });
+  const io = req.app.get('io');
+  if (io) {
+    io.to('admins').emit('report:new', populatedReport || report);
+    io.emit('report:new', populatedReport || report);
+  }
+
+  res.status(201).json({ success: true, report: populatedReport || report });
 };
 
 exports.getNearbyReports = async (req, res) => {
@@ -109,14 +143,10 @@ exports.getFeed = async (req, res) => {
   const filter = {};
   if (category) filter.category = category;
 
-  let sortOption = { createdAt: -1 };
-  if (sort === 'popular') {
-    // We can't easily sort by upvotes.length in Mongo, so fetch + sort in memory
-  }
-
   let reports = await Report.find(filter)
     .populate('reporterId', 'name badges points')
     .populate('authorityId', 'name department')
+    .sort({ createdAt: -1 })
     .limit(parseInt(limit));
 
   if (sort === 'popular') {
@@ -140,10 +170,7 @@ exports.getAllReports = async (req, res) => {
   if (category) filter.category = category;
   if (authorityId) filter.authorityId = authorityId;
 
-  if (req.user.role === 'admin' && req.user.authorityId) {
-    filter.authorityId = req.user.authorityId;
-  }
-
+  // Municipal admin dashboard sees ALL reports (including pending/unassigned)
   const reports = await Report.find(filter)
     .populate('reporterId', 'name email')
     .populate('authorityId', 'name department')
@@ -162,31 +189,36 @@ exports.updateStatus = async (req, res) => {
   const report = await Report.findById(req.params.id);
   if (!report) return res.status(404).json({ success: false, message: 'Report not found' });
 
-  if (
-    req.user.role === 'admin' &&
-    req.user.authorityId &&
-    report.authorityId &&
-    String(report.authorityId) !== String(req.user.authorityId)
-  ) {
-    return res.status(403).json({ success: false, message: 'Not your zone' });
-  }
-
   const previousStatus = report.status;
   report.status = status;
-  report.statusHistory.push({ status, changedBy: req.user._id, note: note || '' });
+  report.statusHistory.push({
+    status,
+    changedBy: req.user._id,
+    actor: req.user._id,
+    note: note || '',
+  });
   await report.save();
 
-  // Award points when transitioning to resolved (only once)
+  // Award 20 points when transitioning to resolved (only once)
   if (status === 'resolved' && previousStatus !== 'resolved') {
     await awardPoints(report.reporterId, 20);
     await refreshUserBadges(report.reporterId);
   }
 
-  const io = req.app.get('io');
-  io.to(`user:${report.reporterId}`).emit('report:updated', report);
-  io.to('admins').emit('report:updated', report);
+  const updatedReport = await Report.findById(report._id)
+    .populate('reporterId', 'name email badges points')
+    .populate('authorityId', 'name department')
+    .populate('statusHistory.changedBy', 'name role')
+    .populate('statusHistory.actor', 'name role');
 
-  res.json({ success: true, report });
+  const io = req.app.get('io');
+  if (io) {
+    io.to(`user:${report.reporterId}`).emit('report:updated', updatedReport || report);
+    io.to('admins').emit('report:updated', updatedReport || report);
+    io.emit('report:updated', updatedReport || report);
+  }
+
+  res.json({ success: true, report: updatedReport || report });
 };
 
 exports.upvoteReport = async (req, res) => {
@@ -200,9 +232,21 @@ exports.upvoteReport = async (req, res) => {
   if (!alreadyUpvoted) {
     report.upvotes.push(req.user._id);
     await report.save();
-    // Award points to original reporter
+    // Award 5 points to original reporter
     await awardPoints(report.reporterId, 5);
     await refreshUserBadges(report.reporterId);
+
+    const populated = await Report.findById(report._id)
+      .populate('reporterId', 'name email badges points')
+      .populate('authorityId', 'name department');
+
+    // Broadcast upvote update to all clients
+    const io = req.app.get('io');
+    if (io) {
+      io.to('admins').emit('report:updated', populated || report);
+      io.emit('report:updated', populated || report);
+      io.to(`user:${report.reporterId}`).emit('report:updated', populated || report);
+    }
   }
 
   res.json({
@@ -212,39 +256,29 @@ exports.upvoteReport = async (req, res) => {
   });
 };
 
-// ... (keep all your existing imports and functions above)
-
 exports.getReportById = async (req, res) => {
   const report = await Report.findById(req.params.id)
     .populate('reporterId', 'name email badges points')
     .populate('authorityId', 'name department')
-    .populate('statusHistory.changedBy', 'name role');
+    .populate('statusHistory.changedBy', 'name role')
+    .populate('statusHistory.actor', 'name role');
   if (!report) return res.status(404).json({ success: false, message: 'Not found' });
   res.json({ success: true, report });
 };
 
-// ✅ ADD THIS NEW FUNCTION
 exports.deleteReport = async (req, res) => {
   const report = await Report.findById(req.params.id);
   if (!report) {
     return res.status(404).json({ success: false, message: 'Report not found' });
   }
 
-  // Admins can only delete reports in their own zone (if they have an authorityId)
-  if (
-    req.user.role === 'admin' &&
-    req.user.authorityId &&
-    report.authorityId &&
-    String(report.authorityId) !== String(req.user.authorityId)
-  ) {
-    return res.status(403).json({ success: false, message: 'Not your zone' });
-  }
-
   await report.deleteOne();
 
   // Notify all connected clients (mobile + admin) to remove this report
   const io = req.app.get('io');
-  io.emit('report:deleted', { id: req.params.id });
+  if (io) {
+    io.emit('report:deleted', { id: req.params.id });
+  }
 
   res.json({ success: true, message: 'Report deleted successfully' });
 };

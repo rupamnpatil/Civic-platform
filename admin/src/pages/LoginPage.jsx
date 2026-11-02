@@ -18,7 +18,13 @@ export default function LoginPage() {
       await login(email, password);
       navigate('/');
     } catch (err) {
-      setError(err.response?.data?.message || err.message || 'Login failed');
+      if (err.message === 'Network Error') {
+        setError(
+          'Cannot connect to Backend Server (port 5000). Please ensure "start-all.bat" is running.'
+        );
+      } else {
+        setError(err.response?.data?.message || err.message || 'Login failed');
+      }
     } finally {
       setLoading(false);
     }
@@ -48,7 +54,7 @@ export default function LoginPage() {
           </h2>
 
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded-lg text-xs font-semibold mb-4">
+            <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded-lg text-xs font-semibold mb-4 leading-relaxed">
               {error}
             </div>
           )}

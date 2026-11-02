@@ -4,6 +4,7 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import client from '../api/client';
+import useSocket from '../hooks/useSocket';
 import { COLORS, SPACING, RADIUS, SHADOWS } from '../utils/theme';
 
 const PRIORITY = {
@@ -26,6 +27,13 @@ export default function AnnouncementsScreen() {
   };
 
   useFocusEffect(useCallback(() => { fetchData(); }, []));
+
+  useSocket({
+    onAnnouncementNew: (a) =>
+      setAnnouncements((prev) => (prev.some((x) => x._id === a._id) ? prev : [a, ...prev])),
+    onAnnouncementDeleted: ({ id }) =>
+      setAnnouncements((prev) => prev.filter((x) => x._id !== id)),
+  });
 
   if (loading) {
     return (

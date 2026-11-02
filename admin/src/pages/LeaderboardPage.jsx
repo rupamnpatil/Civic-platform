@@ -68,7 +68,7 @@ export default function LeaderboardPage() {
                     <div key={u._id} className="text-center">
                       <div className="mb-3">
                         <div className="w-14 h-14 rounded-full bg-white border-2 border-slate-200 mx-auto flex items-center justify-center text-lg font-extrabold text-slate-900 shadow-sm">
-                          {u.name[0]?.toUpperCase()}
+                          {(u.name?.[0] || 'U').toUpperCase()}
                         </div>
                         <p className="font-bold text-slate-900 mt-2 text-sm truncate px-2">
                           {u.name}
@@ -101,7 +101,7 @@ export default function LeaderboardPage() {
                     {String(idx + 1).padStart(2, '0')}
                   </span>
                   <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center font-extrabold text-slate-900 text-sm">
-                    {u.name[0]?.toUpperCase()}
+                    {(u.name?.[0] || 'U').toUpperCase()}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-bold text-slate-900 text-sm truncate">{u.name}</p>

@@ -169,7 +169,7 @@ export default function DashboardPage() {
         </aside>
 
         <main className="flex-1 relative">
-          <ReportMap reports={filtered} onSelect={setSelected} />
+          <ReportMap reports={filtered} selected={selected} onSelect={setSelected} />
 
           {selected && (
             <div className="absolute top-4 right-4 bg-white rounded-xl w-96 max-h-[calc(100%-2rem)] overflow-y-auto shadow-2xl border border-slate-200 z-[1000]">

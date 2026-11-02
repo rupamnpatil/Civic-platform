@@ -9,12 +9,14 @@ import { SERVER_URL } from '../api/client';
  * @param {Function} onReportUpdated - called when a report is updated
  * @param {Function} onReportDeleted - called when a report is deleted
  * @param {Function} onAnnouncementNew - called when a new announcement is posted
+ * @param {Function} onAnnouncementDeleted - called when an announcement is deleted
  */
 export default function useSocket({
   onReportNew,
   onReportUpdated,
   onReportDeleted,
   onAnnouncementNew,
+  onAnnouncementDeleted,
 } = {}) {
   const socketRef = useRef(null);
 
@@ -27,20 +29,21 @@ export default function useSocket({
 
       const socket = io(SERVER_URL, {
         auth: { token },
-        transports: ['websocket'],
+        transports: ['websocket', 'polling'],
       });
 
       socketRef.current = socket;
 
-      socket.on('connect', () => console.log('🔌 Socket connected'));
+      socket.on('connect', () => console.log('🔌 Mobile Socket connected'));
       socket.on('connect_error', (err) =>
-        console.log('Socket error:', err.message)
+        console.log('Mobile Socket error:', err.message)
       );
 
       socket.on('report:new', (data) => onReportNew?.(data));
       socket.on('report:updated', (data) => onReportUpdated?.(data));
       socket.on('report:deleted', (data) => onReportDeleted?.(data));
       socket.on('announcement:new', (data) => onAnnouncementNew?.(data));
+      socket.on('announcement:deleted', (data) => onAnnouncementDeleted?.(data));
     };
 
     connectSocket();

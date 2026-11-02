@@ -1,6 +1,15 @@
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
+require('dotenv').config(); // fallback
+
+const dns = require('dns');
+// Set public DNS to resolve Atlas SRV records reliably
+if (dns.setDefaultResultOrder) dns.setDefaultResultOrder('ipv4first');
+try { dns.setServers(['8.8.8.8', '1.1.1.1', '8.8.4.4']); } catch (e) {}
+
 const http = require('http');
 const { Server } = require('socket.io');
+const mongoose = require('mongoose');
 const app = require('./app');
 const connectDB = require('./config/db');
 const initSocket = require('./sockets/socketHandler');
@@ -9,12 +18,28 @@ const PORT = process.env.PORT || 5000;
 const SERVER_TIMEOUT = parseInt(process.env.SERVER_TIMEOUT, 10) || 600000; // 10 minutes
 
 (async () => {
-  await connectDB();
+  // Attempt database connection
+  try {
+    await connectDB();
+  } catch (err) {
+    console.warn('⚠️ Starting HTTP & WebSocket server in standby mode while database reconnects...');
+    // Schedule periodic reconnection
+    const retryInterval = setInterval(async () => {
+      try {
+        if (mongoose.connection.readyState === 0) {
+          console.log('🔄 Retrying MongoDB connection...');
+          await connectDB();
+          clearInterval(retryInterval);
+        }
+      } catch (retryErr) {
+        // Suppress repeated stack trace during retry
+      }
+    }, 10000);
+  }
 
   const server = http.createServer(app);
 
   // === Fix for "Upstream idle timeout exceeded" ===
-  // Set server-level timeout to keep connections alive longer
   server.timeout = SERVER_TIMEOUT;
   server.keepAliveTimeout = SERVER_TIMEOUT;
   server.headersTimeout = SERVER_TIMEOUT + 10000;
@@ -39,10 +64,9 @@ const SERVER_TIMEOUT = parseInt(process.env.SERVER_TIMEOUT, 10) || 600000; // 10
 
   const io = new Server(server, {
     cors: {
-      origin: process.env.CLIENT_URL || '*',
+      origin: '*',
       methods: ['GET', 'POST'],
     },
-    // Socket.io ping timeout settings to prevent idle disconnects
     pingTimeout: SERVER_TIMEOUT,
     pingInterval: 25000,
     transports: ['websocket', 'polling'],

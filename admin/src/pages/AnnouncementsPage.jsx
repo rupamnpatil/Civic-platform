@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import client from '../api/client';
+import useSocket from '../hooks/useSocket';
 
 const PRIORITIES = [
   { id: 'normal', label: 'Info', color: '#2563EB', bg: '#DBEAFE' },
@@ -25,6 +26,14 @@ export default function AnnouncementsPage() {
   };
 
   useEffect(() => { fetchAnnouncements(); }, []);
+
+  useSocket(
+    null,
+    null,
+    null,
+    (a) => setAnnouncements((prev) => (prev.some((x) => x._id === a._id) ? prev : [a, ...prev])),
+    ({ id }) => setAnnouncements((prev) => prev.filter((a) => a._id !== id))
+  );
 
   const handleSubmit = async (e) => {
     e.preventDefault();

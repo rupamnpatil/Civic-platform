@@ -9,29 +9,44 @@ const signToken = (id) =>
 exports.register = async (req, res) => {
   const { name, email, password, role, authorityId } = req.body;
   if (!name || !email || !password) {
-    return res.status(400).json({ success: false, message: 'Missing fields' });
+    return res.status(400).json({ success: false, message: 'Please fill in all required fields' });
   }
-  const exists = await User.findOne({ email });
+
+  const normalizedEmail = String(email).trim().toLowerCase();
+
+  if (password.length < 6) {
+    return res.status(400).json({
+      success: false,
+      message: 'Password must be at least 6 characters long',
+    });
+  }
+
+  const exists = await User.findOne({ email: normalizedEmail });
   if (exists) {
     return res.status(409).json({ success: false, message: 'Email already registered' });
   }
+
   const user = await User.create({
-    name,
-    email,
+    name: name.trim(),
+    email: normalizedEmail,
     password,
     role: role === 'admin' ? 'admin' : 'citizen',
     authorityId: authorityId || null,
   });
+
   const token = signToken(user._id);
   res.status(201).json({
     success: true,
     token,
     user: {
       id: user._id,
+      _id: user._id,
       name: user.name,
       email: user.email,
       role: user.role,
       authorityId: user.authorityId,
+      points: user.points || 0,
+      badges: user.badges || [],
     },
   });
 };
@@ -41,20 +56,27 @@ exports.login = async (req, res) => {
   if (!email || !password) {
     return res.status(400).json({ success: false, message: 'Missing credentials' });
   }
-  const user = await User.findOne({ email }).select('+password');
+
+  const normalizedEmail = String(email).trim().toLowerCase();
+  const user = await User.findOne({ email: normalizedEmail }).select('+password');
+
   if (!user || !(await user.comparePassword(password))) {
     return res.status(401).json({ success: false, message: 'Invalid credentials' });
   }
+
   const token = signToken(user._id);
   res.json({
     success: true,
     token,
     user: {
       id: user._id,
+      _id: user._id,
       name: user.name,
       email: user.email,
       role: user.role,
       authorityId: user.authorityId,
+      points: user.points || 0,
+      badges: user.badges || [],
     },
   });
 };

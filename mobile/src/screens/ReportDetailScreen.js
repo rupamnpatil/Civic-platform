@@ -4,6 +4,7 @@ import {
   TouchableOpacity, ActivityIndicator, Alert,
 } from 'react-native';
 import client from '../api/client';
+import useSocket from '../hooks/useSocket';
 import { CATEGORY_EMOJI } from '../utils/categories';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -30,10 +31,21 @@ export default function ReportDetailScreen({ route }) {
     }
   };
 
+  // Live status and upvote synchronization
+  useSocket({
+    onReportUpdated: (updated) => {
+      if (updated._id === id) {
+        setReport(updated);
+      }
+    },
+  });
+
   const handleUpvote = async () => {
     try {
-      await client.post(`/reports/${id}/upvote`);
-      fetchReport();
+      const res = await client.post(`/reports/${id}/upvote`);
+      if (res.data.success) {
+        fetchReport();
+      }
     } catch (err) { console.log(err.message); }
   };
 
@@ -45,7 +57,10 @@ export default function ReportDetailScreen({ route }) {
     );
   }
 
-  const hasUpvoted = report.upvotes?.some((u) => String(u) === String(user.id));
+  const currentUserId = user?.id || user?._id;
+  const hasUpvoted = report.upvotes?.some(
+    (u) => String(u._id || u) === String(currentUserId)
+  );
   const upvoteCount = report.upvotes?.length || 0;
 
   return (
